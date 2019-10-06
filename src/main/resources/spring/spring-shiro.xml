@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:util="http://www.springframework.org/schema/util"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+        http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.3.xsd http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util.xsd">
+
+    <!--    指定使用注解方式-->
+    <context:annotation-config></context:annotation-config>
+
+<!--    <bean class="org.apache.shiro.spring.LifecycleBeanPostProcessor"></bean>-->
+<!--    <bean class="org.apache.shiro.spring.security.interceptor.AuthorizationAttributeSourceAdvisor">-->
+<!--        <property name="securityManager" ref="securityManager"></property>-->
+<!--    </bean>-->
+
+    <bean id="shiroFilter" class="org.apache.shiro.spring.web.ShiroFilterFactoryBean">
+        <property name="securityManager" ref="securityManager"></property>
+        <!--        配置登录跳转页面-->
+        <property name="loginUrl" value="loginPage.do"></property>
+        <!--        配置未登录认证跳转页面-->
+        <property name="unauthorizedUrl" value="unauthorized.html"></property>
+        <!--        过滤器链，按顺序进行-->
+        <property name="filterChainDefinitions">
+            <value>
+                <!--静态资源不用认证就可以访问-->
+                /css/**=anon
+                /js/**=anon
+                /images/**=anon
+                /loginPage.do=anon
+                /register.do=anon
+                /login.do=anon
+                /WEB-INF/jsp/register_succeeded.jsp=anon
+                /WEB-INF/jsp/register_failed.jsp=anon
+                /logout.do=logout
+                /index.html=anon
+                /*=rolesOr[user,admin,root]
+                <!--                /testAdmin=roles[admin]-->
+                <!--必须进行认证才可以访问-->
+<!--                /*=authc-->
+            </value>
+        </property>
+        <property name="filters">
+            <util:map>
+                <entry key="rolesOr" value-ref="rolesOrFilter"></entry>
+            </util:map>
+        </property>
+    </bean>
+
+    <!--    自定义的Filter-->
+    <bean id="rolesOrFilter" class="shiro.filter.RolesOrFilter"></bean>
+
+    <!--    创建SecurityManager对象，由它进行统一管理-->
+    <bean id="securityManager" class="org.apache.shiro.web.mgt.DefaultWebSecurityManager">
+        <property name="realm" ref="customRealm"></property>
+        <property name="sessionManager" ref="sessionManager"></property>
+        <property name="cacheManager" ref="cacheManager"></property>
+        <property name="rememberMeManager" ref="cookieRememberMEManager"></property>
+    </bean>
+
+    <!--    配置Realm数据源-->
+    <bean id="customRealm" class="shiro.realm.CustomRealm">
+        <property name="credentialsMatcher" ref="credentialsMatcher"></property>
+    </bean>
+
+    <!--    配置matcher，使用自定义Matcher-->
+    <bean id="credentialsMatcher" class="shiro.matcher.CustomCredentialsMatcher">
+        <constructor-arg ref="cacheManager"/>
+        <property name="hashAlgorithmName" value="md5"></property>
+        <property name="hashIterations" value="1"></property>
+        <!--        <property name="hashSalted" value="true"></property>-->
+    </bean>
+
+    <!--    配置Session管理器，注入Dao-->
+    <bean id="sessionManager" class="shiro.session.manager.CustomSessionManager">
+        <property name="cacheManager" ref="cacheManager"/>
+        <property name="sessionDAO" ref="redisSessionDao"></property>
+        <property name="sessionIdCookie" ref="cookie"></property>
+        <!-- 全局的会话信息时间,,单位为毫秒  -->
+        <property name="globalSessionTimeout" value="1800000"/>
+        <!-- 检测扫描信息时间间隔,单位为毫秒-->
+        <property name="sessionValidationInterval" value="60000"/>
+        <!-- 是否开启扫描 -->
+        <property name="sessionValidationSchedulerEnabled" value="false"/>
+        <!-- 去掉URL中的JSESSIONID -->
+        <property name="sessionIdUrlRewritingEnabled" value="true"/>
+    </bean>
+
+    <!--    配置自定义Session管理Dao，使用Redis进行Session管理-->
+    <bean id="redisSessionDao" class="shiro.session.RedisSessionDao"></bean>
+
+    <bean id="customJedisUtil" class="util.CustomJedisUtil"></bean>
+
+    <!--    缓存及缓存管理-->
+    <bean id="redisCache" class="shiro.cache.RedisCache"></bean>
+    <bean id="cacheManager" class="shiro.cache.RedisCacheManager"></bean>
+
+    <!--    实现记住账号，自动登录（使用Cookie）-->
+    <bean id="cookieRememberMEManager" class="org.apache.shiro.web.mgt.CookieRememberMeManager">
+        <property name="cookie" ref="cookie"></property>
+    </bean>
+<!--    3分钟过期时间，指定cookie名字为shiro.session-->
+    <bean id="cookie" class="org.apache.shiro.web.servlet.SimpleCookie">
+        <!-- 设置Cookie名字, 默认为: JSESSIONID 问题: 与SERVLET容器名冲突, 如JETTY, TOMCAT 等默认JSESSIONID,
+                            当跳出SHIRO SERVLET时如ERROR-PAGE容器会为JSESSIONID重新分配值导致登录会话丢失! -->
+        <constructor-arg name="name" value="shiro.sesssion"></constructor-arg>
+        <property name="maxAge" value="180"></property>
+        <!-- JSESSIONID的path为/用于多个系统共享JSESSIONID -->
+        <!-- <property name="path" value="/"/> -->
+        <!-- 浏览器中通过document.cookie可以获取cookie属性，设置了HttpOnly=true,在脚本中就不能的到cookie，可以避免cookie被盗用 -->
+        <property name="httpOnly" value="true"/>
+    </bean>
+</beans>
